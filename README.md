@@ -1,6 +1,6 @@
 # GPoll
 
-[![GoDoc Widget]][GoDoc]
+[![GoDoc](https://godoc.org/github.com/eddieowens/gpoll?status.svg)](https://godoc.org/github.com/eddieowens/gpoll)
 
 Go library for polling a Git repository.
 
