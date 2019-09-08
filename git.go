@@ -120,7 +120,11 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 			gitChange.ChangeType = ChangeTypeCreate
 		}
 
-		gitChange.Filepath = d.To.Name
+		if gitChange.ChangeType == ChangeTypeDelete {
+			gitChange.Filepath = d.From.Name
+		} else {
+			gitChange.Filepath = d.To.Name
+		}
 		gitChange.Sha = remCommit.Hash.String()
 
 		changes = append(changes, gitChange)
