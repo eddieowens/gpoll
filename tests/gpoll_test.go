@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"github.com/eddieowens/gpoll"
 	"github.com/stretchr/testify/suite"
 	"testing"
@@ -22,8 +23,11 @@ func (g *Gpoll) Test() {
 				SshKey: "~/.ssh/id_rsa",
 			},
 			Remote: "git@github.com:eddieowens/gpoll.git",
+			Branch: "test/something",
 		},
-		Interval: 1,
+		OnUpdate: func(change gpoll.GitChange) {
+			fmt.Println(change)
+		},
 	})
 
 	if !g.NoError(err) {
@@ -32,6 +36,7 @@ func (g *Gpoll) Test() {
 
 	// -- When
 	//
+	poller.Start()
 
 	// -- Then
 	//
