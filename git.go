@@ -121,7 +121,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 		}
 
 		gitChange.Filepath = d.To.Name
-		gitChange.Sha = d.To.TreeEntry.Hash.String()
+		gitChange.Sha = remCommit.Hash.String()
 
 		changes = append(changes, gitChange)
 	}
@@ -132,8 +132,9 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 	}
 
 	err = wt.Pull(&git.PullOptions{
-		SingleBranch: true,
-		Auth:         g.authMethod,
+		SingleBranch:  true,
+		ReferenceName: plumbing.NewBranchReferenceName(branch),
+		Auth:          g.authMethod,
 	})
 
 	if err != nil {
