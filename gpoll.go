@@ -37,9 +37,7 @@ type GitAuthConfig struct {
 	Password string `validation:"require_without=SshKey,required_with=Username"`
 }
 
-type OnStartFunc func(filepath string)
-
-type OnUpdateFunc func(change GitChange)
+type HandleFunc func(change GitChange)
 
 type FilterFunc func(change GitChange) bool
 
@@ -47,14 +45,11 @@ type PollConfig struct {
 	Git GitConfig `validate:"required"`
 
 	// Function that is called when a change is detected. If true is returned for the change, The function set for
-	// OnUpdate will trigger. If false is returned, OnUpdate will not be called.
+	// HandleChange will trigger. If false is returned, HandleChange will not be called.
 	Filter FilterFunc
 
-	// Function that is called when the poller starts. Passes in the filepath of every valid file in the git repo.
-	OnStart OnStartFunc
-
 	// Function that is called when a change occurs to a file in the git repository.
-	OnUpdate OnUpdateFunc
+	HandleChange HandleFunc
 
 	// The polling interval. Defaults to 30 seconds.
 	Interval time.Duration
@@ -153,12 +148,20 @@ func (p *poller) Stop() {
 }
 
 func (p *poller) onStart() error {
-	if p.config.OnStart != nil {
+	if p.config.HandleChange != nil {
+		hash, err := p.git.HeadHash(p.repo)
+		if err != nil {
+			return err
+		}
 		return filepath.Walk(p.config.Git.CloneDirectory, func(path string, _ os.FileInfo, err error) error {
 			if err != nil {
 				return filepath.SkipDir
 			}
-			p.config.OnStart(path)
+			p.config.HandleChange(GitChange{
+				Filepath:   path,
+				Sha:        hash,
+				ChangeType: ChangeTypeCreate,
+			})
 			return nil
 		})
 	}
@@ -190,8 +193,8 @@ func (p *poller) loop(ticker *time.Ticker) {
 				continue
 			}
 			for _, c := range changes {
-				if p.config.OnUpdate != nil {
-					p.config.OnUpdate(c)
+				if p.config.HandleChange != nil {
+					p.config.HandleChange(c)
 				}
 				p.c <- c
 			}

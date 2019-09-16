@@ -25,7 +25,7 @@ func (g *Gpoll) Test() {
 			Remote: "git@github.com:eddieowens/gpoll.git",
 			Branch: "test/something",
 		},
-		OnUpdate: func(change gpoll.GitChange) {
+		HandleChange: func(change gpoll.GitChange) {
 			fmt.Println(change)
 		},
 	})
