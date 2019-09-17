@@ -22,8 +22,9 @@ func (g *Gpoll) Test() {
 			Auth: gpoll.GitAuthConfig{
 				SshKey: "~/.ssh/id_rsa",
 			},
-			Remote: "git@github.com:eddieowens/gpoll.git",
-			Branch: "test/something",
+			Remote:         "git@github.com:eddieowens/gpoll.git",
+			Branch:         "test/something",
+			CloneDirectory: "./something",
 		},
 		HandleChange: func(change gpoll.GitChange) {
 			fmt.Println(change)

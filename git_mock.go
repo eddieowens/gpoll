@@ -9,6 +9,11 @@ type gitMock struct {
 	baseMock
 }
 
+func (g *gitMock) HeadHash(repo *git.Repository) (string, error) {
+	args := g.Called(repo)
+	return args.String(0), args.Error(1)
+}
+
 func (g *gitMock) Clone(remote, branch, directory string) (*git.Repository, error) {
 	args := g.Called(remote, branch, directory)
 	return g.gitRepository(args, 0), args.Error(1)

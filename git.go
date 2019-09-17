@@ -8,6 +8,7 @@ import (
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/plumbing/transport"
 	"gopkg.in/src-d/go-git.v4/utils/merkletrie"
+	"time"
 )
 
 // Represents a change to a file within the target Git repo.
@@ -20,6 +21,9 @@ type GitChange struct {
 
 	// The type of change that occurred e.g. added, created, deleted the file.
 	ChangeType ChangeType
+
+	// The time (UTC) that the commit was made.
+	When time.Time
 }
 
 type ChangeType int
@@ -135,6 +139,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 			gitChange.Filepath = d.To.Name
 		}
 		gitChange.Sha = remCommit.Hash.String()
+		gitChange.When = remCommit.Author.When
 
 		changes = append(changes, gitChange)
 	}
