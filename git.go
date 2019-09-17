@@ -64,19 +64,19 @@ type gitService interface {
 	Clone(remote, branch, directory string) (*git.Repository, error)
 	DiffRemote(repo *git.Repository, branch string) ([]GitChange, error)
 	FetchLatestRemoteCommit(repo *git.Repository, branch string) (*object.Commit, error)
-	HeadHash(repo *git.Repository) (string, error)
+	HeadCommit(repo *git.Repository) (*object.Commit, error)
 }
 
 type gitImpl struct {
 	authMethod transport.AuthMethod
 }
 
-func (g *gitImpl) HeadHash(repo *git.Repository) (string, error) {
+func (g *gitImpl) HeadCommit(repo *git.Repository) (*object.Commit, error) {
 	h, err := repo.Head()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return h.Hash().String(), nil
+	return repo.CommitObject(h.Hash())
 }
 
 func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, error) {
@@ -139,7 +139,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 			gitChange.Filepath = d.To.Name
 		}
 		gitChange.Sha = remCommit.Hash.String()
-		gitChange.When = remCommit.Author.When
+		gitChange.When = remCommit.Author.When.UTC()
 
 		changes = append(changes, gitChange)
 	}

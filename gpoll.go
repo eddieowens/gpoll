@@ -149,7 +149,7 @@ func (p *poller) Stop() {
 
 func (p *poller) onStart() error {
 	if p.config.HandleChange != nil {
-		hash, err := p.git.HeadHash(p.repo)
+		commit, err := p.git.HeadCommit(p.repo)
 		if err != nil {
 			return err
 		}
@@ -159,8 +159,9 @@ func (p *poller) onStart() error {
 			}
 			p.config.HandleChange(GitChange{
 				Filepath:   path,
-				Sha:        hash,
+				Sha:        commit.Hash.String(),
 				ChangeType: ChangeTypeCreate,
+				When:       commit.Author.When.UTC(),
 			})
 			return nil
 		})
