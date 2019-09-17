@@ -37,7 +37,7 @@ func (g *Gpoll) Test() {
 
 	// -- When
 	//
-	poller.Start()
+	g.NoError(poller.Start())
 
 	// -- Then
 	//
