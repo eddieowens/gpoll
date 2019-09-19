@@ -153,12 +153,19 @@ func (p *poller) onStart() error {
 		if err != nil {
 			return err
 		}
-		return filepath.Walk(p.config.Git.CloneDirectory, func(path string, _ os.FileInfo, err error) error {
+		gitDir := path.Join("*", ".git")
+		return filepath.Walk(p.config.Git.CloneDirectory, func(fp string, _ os.FileInfo, err error) error {
 			if err != nil {
 				return filepath.SkipDir
 			}
+			isInGitDir, _ := filepath.Match(path.Join(gitDir, "*"), fp)
+			isGitDir, _ := filepath.Match(gitDir, fp)
+			if isInGitDir || isGitDir {
+				return filepath.SkipDir
+			}
+
 			p.config.HandleChange(GitChange{
-				Filepath:   path,
+				Filepath:   fp,
 				Sha:        commit.Hash.String(),
 				ChangeType: ChangeTypeCreate,
 				When:       commit.Author.When.UTC(),
