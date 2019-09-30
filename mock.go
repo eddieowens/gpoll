@@ -19,11 +19,11 @@ func (b *baseMock) gitRepository(args mock.Arguments, i int) *git.Repository {
 	return r
 }
 
-func (b *baseMock) gitChangeSlice(args mock.Arguments, i int) []GitChange {
-	var r []GitChange
+func (b *baseMock) gitChangeSlice(args mock.Arguments, i int) []FileChange {
+	var r []FileChange
 	v := args.Get(i)
 	if v != nil {
-		r = v.([]GitChange)
+		r = v.([]FileChange)
 	}
 	return r
 }

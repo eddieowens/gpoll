@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"fmt"
 	"github.com/eddieowens/gpoll"
 	"github.com/stretchr/testify/suite"
 	"testing"
@@ -26,8 +25,7 @@ func (g *Gpoll) Test() {
 			Branch:         "test/something",
 			CloneDirectory: "./something",
 		},
-		HandleChange: func(change gpoll.GitChange) {
-			fmt.Println(change)
+		HandleCommit: func(commit gpoll.Commit) {
 		},
 	})
 

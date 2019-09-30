@@ -2,6 +2,7 @@ package gpoll
 
 import (
 	"github.com/bxcodec/faker/v3"
+	"github.com/eddieowens/gpoll/mocks"
 	"github.com/stretchr/testify/suite"
 	"gopkg.in/src-d/go-git.v4"
 	"testing"
@@ -10,12 +11,12 @@ import (
 type GpollTest struct {
 	suite.Suite
 
-	gitMock *gitMock
+	gitMock *mocks.GitService
 	p       *poller
 }
 
 func (g *GpollTest) SetupTest() {
-	g.gitMock = new(gitMock)
+	g.gitMock = new(mocks.GitService)
 	p, err := NewPoller(PollConfig{
 		Git: GitConfig{
 			Auth: GitAuthConfig{
@@ -66,12 +67,12 @@ func RandInt(l, u int) int {
 	return is[0]
 }
 
-func FakeGitChanges() []GitChange {
+func FakeGitChanges() []FileChange {
 	c := RandInt(0, 3)
 	n := RandInt(1, 10)
-	cs := make([]GitChange, n)
+	cs := make([]FileChange, n)
 	for i := range cs {
-		cs[i] = GitChange{
+		cs[i] = FileChange{
 			Filepath:   faker.Username(),
 			ChangeType: ChangeType(c),
 			Sha:        faker.Username(),

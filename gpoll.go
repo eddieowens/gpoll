@@ -13,7 +13,7 @@ import (
 type Poller interface {
 	// Start polling your git repo without blocking. The poller will diff the remote against the local clone directory at
 	// the specified interval and return all changes through the configured callback and the returned channel.
-	StartAsync() (chan GitChange, error)
+	StartAsync() (chan Commit, error)
 
 	// Start polling your git repo blocking whatever thread it is run on. The poller will diff the remote against the
 	// local clone directory at the specified interval and return all changes through the configured callback.
@@ -23,33 +23,23 @@ type Poller interface {
 	Stop()
 
 	// Diff the remote and the local and return all differences.
-	Poll() ([]GitChange, error)
+	Poll() ([]Commit, error)
 }
 
-type GitAuthConfig struct {
-	// The filepath to the SSH key. Required if the Username and Password are not set.
-	SshKey string `validation:"required_without=Username Password"`
+type HandleCommitFunc func(commit Commit)
 
-	// The username for the git repo. Required if the SshKey is not set or if the Password is set.
-	Username string `validation:"required_without=SshKey,required_with=Password"`
-
-	// The password for the git repo. Required if the SshKey is not set or if the Username is set.
-	Password string `validation:"require_without=SshKey,required_with=Username"`
-}
-
-type HandleFunc func(change GitChange)
-
-type FilterFunc func(change GitChange) bool
+type FileChangeFilterFunc func(change FileChange) bool
 
 type PollConfig struct {
 	Git GitConfig `validate:"required"`
 
-	// Function that is called when a change is detected. If true is returned for the change, The function set for
-	// HandleChange will trigger. If false is returned, HandleChange will not be called.
-	Filter FilterFunc
+	// Function for filtering out FileChanges made to a Git commit. If the function returns true, the FileChange will be
+	// included in the commit passed into the HandleCommit calls. If false is returned, the file will always be ignored.
+	FileChangeFilter FileChangeFilterFunc
 
-	// Function that is called when a change occurs to a file in the git repository.
-	HandleChange HandleFunc
+	// Function that is called when a commit is made to the Git repo. This function maintains chronological order of
+	// commits and is called synchronously.
+	HandleCommit HandleCommitFunc
 
 	// The polling interval. Defaults to 30 seconds.
 	Interval time.Duration
@@ -79,7 +69,7 @@ func NewPoller(config PollConfig) (Poller, error) {
 	}
 
 	closer := make(chan bool, 1)
-	onChangeChan := make(chan GitChange, 1)
+	onChangeChan := make(chan Commit, 1)
 
 	poller := &poller{
 		c:      onChangeChan,
@@ -92,10 +82,10 @@ func NewPoller(config PollConfig) (Poller, error) {
 }
 
 type poller struct {
-	c      chan GitChange
+	c      chan Commit
 	config *PollConfig
 	closer chan bool
-	git    gitService
+	git    GitService
 	repo   *git.Repository
 }
 
@@ -109,7 +99,7 @@ func (p *poller) Start() error {
 	return nil
 }
 
-func (p *poller) StartAsync() (chan GitChange, error) {
+func (p *poller) StartAsync() (chan Commit, error) {
 	ticker, err := p.setup()
 	if err != nil {
 		return nil, err
@@ -120,24 +110,24 @@ func (p *poller) StartAsync() (chan GitChange, error) {
 	return p.c, nil
 }
 
-func (p *poller) Poll() ([]GitChange, error) {
+func (p *poller) Poll() ([]Commit, error) {
 	changes, err := p.git.DiffRemote(p.repo, p.config.Git.Branch)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(changes) > 0 {
-		if p.config.Filter != nil {
-			filteredChanges := make([]GitChange, 0)
-			for _, c := range changes {
-				if p.config.Filter(c) {
-					filteredChanges = append(filteredChanges, c)
+		for _, change := range changes {
+			for i, c := range change.Changes {
+				if p.config.FileChangeFilter != nil {
+					filteredChanges := make([]FileChange, 0)
+					if p.config.FileChangeFilter(c) {
+						filteredChanges = append(filteredChanges, c)
+					}
+					change.Changes = filteredChanges
 				}
+				change.Changes[i].Filepath = path.Join(p.config.Git.CloneDirectory, c.Filepath)
 			}
-			changes = filteredChanges
-		}
-		for i, c := range changes {
-			changes[i].Filepath = path.Join(p.config.Git.CloneDirectory, c.Filepath)
 		}
 	}
 	return changes, nil
@@ -148,31 +138,40 @@ func (p *poller) Stop() {
 }
 
 func (p *poller) onStart() error {
-	if p.config.HandleChange != nil {
-		commit, err := p.git.HeadCommit(p.repo)
-		if err != nil {
-			return err
-		}
-		gitDir := path.Join("*", ".git")
-		return filepath.Walk(p.config.Git.CloneDirectory, func(fp string, _ os.FileInfo, err error) error {
-			if err != nil {
-				return filepath.SkipDir
-			}
-			isInGitDir, _ := filepath.Match(path.Join(gitDir, "*"), fp)
-			isGitDir, _ := filepath.Match(gitDir, fp)
-			if isInGitDir || isGitDir {
-				return filepath.SkipDir
-			}
-
-			p.config.HandleChange(GitChange{
-				Filepath:   fp,
-				Sha:        commit.Hash.String(),
-				ChangeType: ChangeTypeCreate,
-				When:       commit.Author.When.UTC(),
-			})
-			return nil
-		})
+	if p.config.HandleCommit == nil {
+		return nil
 	}
+	commit, err := p.git.HeadCommit(p.repo)
+	if err != nil {
+		return err
+	}
+	gitDir := path.Join("*", ".git")
+	changes := make([]FileChange, 0)
+	err = filepath.Walk(p.config.Git.CloneDirectory, func(fp string, _ os.FileInfo, err error) error {
+		if err != nil {
+			return filepath.SkipDir
+		}
+		isInGitDir, _ := filepath.Match(path.Join(gitDir, "*"), fp)
+		isGitDir, _ := filepath.Match(gitDir, fp)
+		if isInGitDir || isGitDir {
+			return filepath.SkipDir
+		}
+
+		changes = append(changes, FileChange{
+			Filepath:   fp,
+			ChangeType: ChangeTypeInit,
+		})
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	p.config.HandleCommit(Commit{
+		Changes: changes,
+		Sha:     commit.Hash.String(),
+		When:    commit.Author.When.UTC(),
+	})
 	return nil
 }
 
@@ -201,8 +200,8 @@ func (p *poller) loop(ticker *time.Ticker) {
 				continue
 			}
 			for _, c := range changes {
-				if p.config.HandleChange != nil {
-					p.config.HandleChange(c)
+				if p.config.HandleCommit != nil {
+					p.config.HandleCommit(c)
 				}
 				p.c <- c
 			}

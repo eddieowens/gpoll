@@ -12,31 +12,45 @@ import (
 )
 
 // Represents a change to a file within the target Git repo.
-type GitChange struct {
+type FileChange struct {
 	// The name and absolute path to the changed file.
 	Filepath string
 
-	// The commit sha associated with the change.
-	Sha string
-
 	// The type of change that occurred e.g. added, created, deleted the file.
 	ChangeType ChangeType
+}
 
-	// The time (UTC) that the commit was made.
+// Represents a batch of changes to files in a single commit in a Git repo.
+type Commit struct {
+	// The list of changes that occurred in the commit.
+	Changes []FileChange
+
+	// The Sha of the commit.
+	Sha string
+
+	// When the commit occurred in UTC.
 	When time.Time
 }
 
 type ChangeType int
 
 const (
+	// A pre-existing file was edited in the commit.
 	ChangeTypeUpdate ChangeType = iota
+
+	// A new file was created in the commit.
 	ChangeTypeCreate
+
+	// A pre-existing file was deleted in the commit.
 	ChangeTypeDelete
+
+	// The file is present from the initial clone of the repo. Only ever used once for the clone of the repo.
+	ChangeTypeInit
 )
 
 const remoteName = "origin"
 
-func newGit(config GitConfig) (gitService, error) {
+func newGit(config GitConfig) (GitService, error) {
 	auth, err := toAuthMethod(&config.Auth)
 	if err != nil {
 		return nil, err
@@ -60,9 +74,20 @@ type GitConfig struct {
 	CloneDirectory string
 }
 
-type gitService interface {
+type GitAuthConfig struct {
+	// The filepath to the SSH key. Required if the Username and Password are not set.
+	SshKey string `validation:"required_without=Username Password"`
+
+	// The username for the git repo. Required if the SshKey is not set or if the Password is set.
+	Username string `validation:"required_without=SshKey,required_with=Password"`
+
+	// The password for the git repo. Required if the SshKey is not set or if the Username is set.
+	Password string `validation:"require_without=SshKey,required_with=Username"`
+}
+
+type GitService interface {
 	Clone(remote, branch, directory string) (*git.Repository, error)
-	DiffRemote(repo *git.Repository, branch string) ([]GitChange, error)
+	DiffRemote(repo *git.Repository, branch string) ([]Commit, error)
 	FetchLatestRemoteCommit(repo *git.Repository, branch string) (*object.Commit, error)
 	HeadCommit(repo *git.Repository) (*object.Commit, error)
 }
@@ -79,7 +104,7 @@ func (g *gitImpl) HeadCommit(repo *git.Repository) (*object.Commit, error) {
 	return repo.CommitObject(h.Hash())
 }
 
-func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, error) {
+func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, error) {
 	err := repo.Fetch(&git.FetchOptions{
 		Auth: g.authMethod,
 	})
@@ -116,14 +141,14 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 		return nil, err
 	}
 
-	changes := make([]GitChange, 0)
+	changes := make([]FileChange, 0)
 	for _, d := range diffs {
 		a, err := d.Action()
 		if err != nil {
 			return nil, err
 		}
 
-		gitChange := GitChange{}
+		gitChange := FileChange{}
 		switch a {
 		case merkletrie.Modify:
 			gitChange.ChangeType = ChangeTypeUpdate
@@ -138,8 +163,6 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 		} else {
 			gitChange.Filepath = d.To.Name
 		}
-		gitChange.Sha = remCommit.Hash.String()
-		gitChange.When = remCommit.Author.When.UTC()
 
 		changes = append(changes, gitChange)
 	}
@@ -159,7 +182,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]GitChange, 
 		return nil, err
 	}
 
-	return changes, nil
+	return []Commit{{Changes: changes}}, nil
 }
 
 func (g *gitImpl) Clone(remote, branch, directory string) (*git.Repository, error) {
