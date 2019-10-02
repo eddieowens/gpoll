@@ -143,7 +143,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, err
 
 	iter, err := object.NewCommitAllIter(repo.Storer, func(commit *object.Commit) object.CommitIter {
 		fmt.Println(commit)
-		return object.NewCommitPostorderIter(commit, nil)
+		return object.NewCommitPreorderIter(commit, nil, nil)
 	})
 	fmt.Println(iter)
 	if err != nil {
