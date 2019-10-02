@@ -141,6 +141,15 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, err
 		return nil, err
 	}
 
+	iter, err := object.NewCommitAllIter(repo.Storer, func(commit *object.Commit) object.CommitIter {
+		fmt.Println(commit)
+		return object.NewCommitPostorderIter(commit, nil)
+	})
+	fmt.Println(iter)
+	if err != nil {
+		return nil, err
+	}
+
 	changes := make([]FileChange, 0)
 	for _, d := range diffs {
 		a, err := d.Action()
