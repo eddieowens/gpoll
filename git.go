@@ -142,7 +142,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, err
 	}
 
 	parent, err := remCommit.Parents().Next()
-	for parent != currentCommit && err == nil {
+	for err == nil && parent.Hash != currentCommit.Hash {
 		fmt.Println(parent)
 		parent, err = parent.Parents().Next()
 	}
