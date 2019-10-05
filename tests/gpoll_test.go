@@ -22,10 +22,10 @@ func (g *Gpoll) Test() {
 				SshKey: "~/.ssh/id_rsa",
 			},
 			Remote:         "git@github.com:eddieowens/gpoll.git",
-			Branch:         "test/something",
+			Branch:         "test/another",
 			CloneDirectory: "./something",
 		},
-		HandleCommit: func(commit gpoll.Commit) {
+		HandleCommit: func(commit gpoll.CommitDiff) {
 		},
 	})
 

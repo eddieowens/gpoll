@@ -3,10 +3,12 @@ package gpoll
 import (
 	"errors"
 	"fmt"
+	"gopkg.in/src-d/go-billy.v4/memfs"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/plumbing/transport"
+	"gopkg.in/src-d/go-git.v4/storage/memory"
 	"gopkg.in/src-d/go-git.v4/utils/merkletrie"
 	"time"
 )
@@ -20,16 +22,36 @@ type FileChange struct {
 	ChangeType ChangeType
 }
 
-// Represents a batch of changes to files in a single commit in a Git repo.
-type Commit struct {
+// Represents a batch of changes to files between two commits in a Git repo.
+type CommitDiff struct {
 	// The list of changes that occurred in the commit.
 	Changes []FileChange
 
+	// The base for the file changes.
+	From Commit
+
+	// The result of the file changes.
+	To Commit
+}
+
+type Commit struct {
 	// The Sha of the commit.
 	Sha string
 
 	// When the commit occurred in UTC.
 	When time.Time
+
+	// The author of the commit.
+	Author Author
+
+	// The message made by the author.
+	Message string
+}
+
+type Author struct {
+	Name string
+
+	Email string
 }
 
 type ChangeType int
@@ -87,56 +109,40 @@ type GitAuthConfig struct {
 
 type GitService interface {
 	Clone(remote, branch, directory string) (*git.Repository, error)
-	DiffRemote(repo *git.Repository, branch string) ([]Commit, error)
+	DiffRemote(repo *git.Repository, branch string) ([]CommitDiff, error)
 	FetchLatestRemoteCommit(repo *git.Repository, branch string) (*object.Commit, error)
 	HeadCommit(repo *git.Repository) (*object.Commit, error)
+	Diff(from *object.Commit, to *object.Commit) (*CommitDiff, error)
+	ToInternal(c *object.Commit) *Commit
 }
 
 type gitImpl struct {
 	authMethod transport.AuthMethod
 }
 
-func (g *gitImpl) HeadCommit(repo *git.Repository) (*object.Commit, error) {
-	h, err := repo.Head()
-	if err != nil {
-		return nil, err
+func (g *gitImpl) ToInternal(c *object.Commit) *Commit {
+	return &Commit{
+		Sha:  c.Hash.String(),
+		When: c.Author.When.UTC(),
+		Author: Author{
+			Name:  c.Author.Name,
+			Email: c.Author.Email,
+		},
+		Message: c.Message,
 	}
-	return repo.CommitObject(h.Hash())
 }
 
-func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, error) {
-	err := repo.Fetch(&git.FetchOptions{
-		Auth: g.authMethod,
-	})
+func (g *gitImpl) Diff(from *object.Commit, to *object.Commit) (*CommitDiff, error) {
+	toTree, err := to.Tree()
+	if err != nil {
+		return nil, err
+	}
+	fromTree, err := from.Tree()
 	if err != nil {
 		return nil, err
 	}
 
-	h, err := repo.Head()
-	if err != nil {
-		return nil, err
-	}
-
-	remCommit, err := g.FetchLatestRemoteCommit(repo, branch)
-	if err != nil {
-		return nil, err
-	}
-
-	currentCommit, err := repo.CommitObject(h.Hash())
-	if err != nil {
-		return nil, err
-	}
-
-	originTree, err := remCommit.Tree()
-	if err != nil {
-		return nil, err
-	}
-	branchTree, err := currentCommit.Tree()
-	if err != nil {
-		return nil, err
-	}
-
-	diffs, err := branchTree.Diff(originTree)
+	diffs, err := fromTree.Diff(toTree)
 	if err != nil {
 		return nil, err
 	}
@@ -167,6 +173,63 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, err
 		changes = append(changes, gitChange)
 	}
 
+	return &CommitDiff{
+		Changes: changes,
+		From:    *g.ToInternal(from),
+		To:      *g.ToInternal(to),
+	}, nil
+}
+
+func (g *gitImpl) HeadCommit(repo *git.Repository) (*object.Commit, error) {
+	h, err := repo.Head()
+	if err != nil {
+		return nil, err
+	}
+	return repo.CommitObject(h.Hash())
+}
+
+func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]CommitDiff, error) {
+	err := repo.Fetch(&git.FetchOptions{
+		Auth: g.authMethod,
+	})
+	if err != nil {
+		if err != git.NoErrAlreadyUpToDate {
+			return nil, err
+		}
+	}
+
+	h, err := repo.Head()
+	if err != nil {
+		return nil, err
+	}
+
+	remCommit, err := g.FetchLatestRemoteCommit(repo, branch)
+	if err != nil {
+		return nil, err
+	}
+
+	currentCommit, err := repo.CommitObject(h.Hash())
+	if err != nil {
+		return nil, err
+	}
+
+	commits, err := g.listCommits(currentCommit, remCommit)
+	if err != nil {
+		return nil, err
+	}
+
+	from := currentCommit
+	diffs := make([]CommitDiff, len(commits)-1)
+	for i := 1; i < len(commits); i++ {
+		to := commits[i]
+		diff, err := g.Diff(from, to)
+		if err != nil {
+			return nil, err
+		}
+		diffs[i-1] = *diff
+		from = to
+	}
+
 	wt, err := repo.Worktree()
 	if err != nil {
 		return nil, err
@@ -182,11 +245,11 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]Commit, err
 		return nil, err
 	}
 
-	return []Commit{{Changes: changes}}, nil
+	return diffs, nil
 }
 
 func (g *gitImpl) Clone(remote, branch, directory string) (*git.Repository, error) {
-	repo, err := git.PlainClone(directory, false, &git.CloneOptions{
+	repo, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL:           remote,
 		RemoteName:    remoteName,
 		ReferenceName: plumbing.NewBranchReferenceName(branch),
@@ -200,6 +263,30 @@ func (g *gitImpl) Clone(remote, branch, directory string) (*git.Repository, erro
 	}
 
 	return repo, nil
+}
+
+func (g *gitImpl) listCommits(from *object.Commit, to *object.Commit) ([]*object.Commit, error) {
+	var err error
+	parent := to
+	cs := make([]*object.Commit, 0)
+	// Get all commits working backwards from the "to" commit
+	for err == nil && parent.Hash != from.Hash {
+		cs = append(cs, parent)
+		parent, err = parent.Parents().Next()
+	}
+	if err != nil {
+		return nil, err
+	}
+	cs = append(cs, from)
+
+	// Reverse the order
+	l := len(cs)
+	commits := make([]*object.Commit, l)
+	for i := range commits {
+		commits[i] = cs[l-(i+1)]
+	}
+
+	return commits, nil
 }
 
 func (g *gitImpl) FetchLatestRemoteCommit(repo *git.Repository, branch string) (*object.Commit, error) {
