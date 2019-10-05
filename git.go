@@ -3,10 +3,12 @@ package gpoll
 import (
 	"errors"
 	"fmt"
+	"gopkg.in/src-d/go-billy.v4/memfs"
 	"gopkg.in/src-d/go-git.v4"
 	"gopkg.in/src-d/go-git.v4/plumbing"
 	"gopkg.in/src-d/go-git.v4/plumbing/object"
 	"gopkg.in/src-d/go-git.v4/plumbing/transport"
+	"gopkg.in/src-d/go-git.v4/storage/memory"
 	"gopkg.in/src-d/go-git.v4/utils/merkletrie"
 	"time"
 )
@@ -247,7 +249,7 @@ func (g *gitImpl) DiffRemote(repo *git.Repository, branch string) ([]CommitDiff,
 }
 
 func (g *gitImpl) Clone(remote, branch, directory string) (*git.Repository, error) {
-	repo, err := git.PlainClone(directory, false, &git.CloneOptions{
+	repo, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL:           remote,
 		RemoteName:    remoteName,
 		ReferenceName: plumbing.NewBranchReferenceName(branch),
@@ -284,7 +286,7 @@ func (g *gitImpl) listCommits(from *object.Commit, to *object.Commit) ([]*object
 		commits[i] = cs[l-(i+1)]
 	}
 
-	return cs, nil
+	return commits, nil
 }
 
 func (g *gitImpl) FetchLatestRemoteCommit(repo *git.Repository, branch string) (*object.Commit, error) {
