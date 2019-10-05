@@ -35,6 +35,29 @@ func (_m *GitService) Clone(remote string, branch string, directory string) (*gi
 	return r0, r1
 }
 
+// Diff provides a mock function with given fields: from, to
+func (_m *GitService) Diff(from *object.Commit, to *object.Commit) (*gpoll.CommitDiff, error) {
+	ret := _m.Called(from, to)
+
+	var r0 *gpoll.CommitDiff
+	if rf, ok := ret.Get(0).(func(*object.Commit, *object.Commit) *gpoll.CommitDiff); ok {
+		r0 = rf(from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gpoll.CommitDiff)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*object.Commit, *object.Commit) error); ok {
+		r1 = rf(from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // DiffRemote provides a mock function with given fields: repo, branch
 func (_m *GitService) DiffRemote(repo *git.Repository, branch string) ([]gpoll.CommitDiff, error) {
 	ret := _m.Called(repo, branch)
@@ -102,4 +125,20 @@ func (_m *GitService) HeadCommit(repo *git.Repository) (*object.Commit, error) {
 	}
 
 	return r0, r1
+}
+
+// ToInternal provides a mock function with given fields: c
+func (_m *GitService) ToInternal(c *object.Commit) *gpoll.Commit {
+	ret := _m.Called(c)
+
+	var r0 *gpoll.Commit
+	if rf, ok := ret.Get(0).(func(*object.Commit) *gpoll.Commit); ok {
+		r0 = rf(c)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*gpoll.Commit)
+		}
+	}
+
+	return r0
 }
