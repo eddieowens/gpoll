@@ -11,15 +11,15 @@ type Poller struct {
 }
 
 // Poll provides a mock function with given fields:
-func (_m *Poller) Poll() ([]gpoll.Commit, error) {
+func (_m *Poller) Poll() ([]gpoll.CommitDiff, error) {
 	ret := _m.Called()
 
-	var r0 []gpoll.Commit
-	if rf, ok := ret.Get(0).(func() []gpoll.Commit); ok {
+	var r0 []gpoll.CommitDiff
+	if rf, ok := ret.Get(0).(func() []gpoll.CommitDiff); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]gpoll.Commit)
+			r0 = ret.Get(0).([]gpoll.CommitDiff)
 		}
 	}
 
@@ -48,15 +48,15 @@ func (_m *Poller) Start() error {
 }
 
 // StartAsync provides a mock function with given fields:
-func (_m *Poller) StartAsync() (chan gpoll.Commit, error) {
+func (_m *Poller) StartAsync() (chan gpoll.CommitDiff, error) {
 	ret := _m.Called()
 
-	var r0 chan gpoll.Commit
-	if rf, ok := ret.Get(0).(func() chan gpoll.Commit); ok {
+	var r0 chan gpoll.CommitDiff
+	if rf, ok := ret.Get(0).(func() chan gpoll.CommitDiff); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(chan gpoll.Commit)
+			r0 = ret.Get(0).(chan gpoll.CommitDiff)
 		}
 	}
 

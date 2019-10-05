@@ -25,7 +25,7 @@ func (g *Gpoll) Test() {
 			Branch:         "test/another",
 			CloneDirectory: "./something",
 		},
-		HandleCommit: func(commit gpoll.Commit) {
+		HandleCommit: func(commit gpoll.CommitDiff) {
 		},
 	})
 

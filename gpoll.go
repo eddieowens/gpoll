@@ -13,7 +13,7 @@ import (
 type Poller interface {
 	// Start polling your git repo without blocking. The poller will diff the remote against the local clone directory at
 	// the specified interval and return all changes through the configured callback and the returned channel.
-	StartAsync() (chan Commit, error)
+	StartAsync() (chan CommitDiff, error)
 
 	// Start polling your git repo blocking whatever thread it is run on. The poller will diff the remote against the
 	// local clone directory at the specified interval and return all changes through the configured callback.
@@ -23,10 +23,10 @@ type Poller interface {
 	Stop()
 
 	// Diff the remote and the local and return all differences.
-	Poll() ([]Commit, error)
+	Poll() ([]CommitDiff, error)
 }
 
-type HandleCommitFunc func(commit Commit)
+type HandleCommitFunc func(commit CommitDiff)
 
 type FileChangeFilterFunc func(change FileChange) bool
 
@@ -69,7 +69,7 @@ func NewPoller(config PollConfig) (Poller, error) {
 	}
 
 	closer := make(chan bool, 1)
-	onChangeChan := make(chan Commit, 1)
+	onChangeChan := make(chan CommitDiff, 1)
 
 	poller := &poller{
 		c:      onChangeChan,
@@ -82,7 +82,7 @@ func NewPoller(config PollConfig) (Poller, error) {
 }
 
 type poller struct {
-	c      chan Commit
+	c      chan CommitDiff
 	config *PollConfig
 	closer chan bool
 	git    GitService
@@ -99,7 +99,7 @@ func (p *poller) Start() error {
 	return nil
 }
 
-func (p *poller) StartAsync() (chan Commit, error) {
+func (p *poller) StartAsync() (chan CommitDiff, error) {
 	ticker, err := p.setup()
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (p *poller) StartAsync() (chan Commit, error) {
 	return p.c, nil
 }
 
-func (p *poller) Poll() ([]Commit, error) {
+func (p *poller) Poll() ([]CommitDiff, error) {
 	changes, err := p.git.DiffRemote(p.repo, p.config.Git.Branch)
 	if err != nil {
 		return nil, err
@@ -167,10 +167,13 @@ func (p *poller) onStart() error {
 	if err != nil {
 		return err
 	}
-	p.config.HandleCommit(Commit{
+
+	base := p.git.ToInternal(commit)
+
+	p.config.HandleCommit(CommitDiff{
 		Changes: changes,
-		Sha:     commit.Hash.String(),
-		When:    commit.Author.When.UTC(),
+		From:    *base,
+		To:      *base,
 	})
 	return nil
 }
@@ -193,18 +196,19 @@ func (p *poller) setup() (*time.Ticker, error) {
 
 func (p *poller) loop(ticker *time.Ticker) {
 	for {
+		changes, err := p.Poll()
+		if err != nil {
+			continue
+		}
+		for _, c := range changes {
+			if p.config.HandleCommit != nil {
+				p.config.HandleCommit(c)
+			}
+			p.c <- c
+		}
 		select {
 		case <-ticker.C:
-			changes, err := p.Poll()
-			if err != nil {
-				continue
-			}
-			for _, c := range changes {
-				if p.config.HandleCommit != nil {
-					p.config.HandleCommit(c)
-				}
-				p.c <- c
-			}
+			continue
 		case <-p.closer:
 			ticker.Stop()
 			return

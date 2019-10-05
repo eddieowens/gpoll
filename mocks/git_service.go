@@ -36,15 +36,15 @@ func (_m *GitService) Clone(remote string, branch string, directory string) (*gi
 }
 
 // DiffRemote provides a mock function with given fields: repo, branch
-func (_m *GitService) DiffRemote(repo *git.Repository, branch string) ([]gpoll.Commit, error) {
+func (_m *GitService) DiffRemote(repo *git.Repository, branch string) ([]gpoll.CommitDiff, error) {
 	ret := _m.Called(repo, branch)
 
-	var r0 []gpoll.Commit
-	if rf, ok := ret.Get(0).(func(*git.Repository, string) []gpoll.Commit); ok {
+	var r0 []gpoll.CommitDiff
+	if rf, ok := ret.Get(0).(func(*git.Repository, string) []gpoll.CommitDiff); ok {
 		r0 = rf(repo, branch)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]gpoll.Commit)
+			r0 = ret.Get(0).([]gpoll.CommitDiff)
 		}
 	}
 
